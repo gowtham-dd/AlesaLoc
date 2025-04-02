@@ -18,7 +18,7 @@ class MapState {
   final List<LatLng> routeCoordinates;
   final List<Map<String, dynamic>> directions;
   final bool isBlinking;
-  final bool isLoading; // Add this line
+  final bool isLoading;
 
   MapState({
     required this.mapController,
@@ -28,7 +28,7 @@ class MapState {
     this.routeCoordinates = const [],
     this.directions = const [],
     this.isBlinking = false,
-    this.isLoading = false, // Add this with default value
+    this.isLoading = false,
   });
 
   MapState copyWith({
@@ -38,7 +38,7 @@ class MapState {
     List<LatLng>? routeCoordinates,
     List<Map<String, dynamic>>? directions,
     bool? isBlinking,
-    bool? isLoading, // Add this parameter
+    bool? isLoading,
   }) {
     return MapState(
       mapController: mapController,
@@ -48,7 +48,7 @@ class MapState {
       routeCoordinates: routeCoordinates ?? this.routeCoordinates,
       directions: directions ?? this.directions,
       isBlinking: isBlinking ?? this.isBlinking,
-      isLoading: isLoading ?? this.isLoading, // Add this
+      isLoading: isLoading ?? this.isLoading,
     );
   }
 }
@@ -87,7 +87,6 @@ class MapControllerNotifier extends StateNotifier<MapState> {
                 ? state.copyWith(startLocation: location)
                 : state.copyWith(endLocation: location);
 
-        // Center map on the new location
         state.mapController.move(location, 15.0);
       }
     } catch (e) {
@@ -99,7 +98,6 @@ class MapControllerNotifier extends StateNotifier<MapState> {
     if (state.startLocation == null || state.endLocation == null) return;
 
     try {
-      // Show loading state
       state = state.copyWith(isLoading: true);
 
       final result = await MapService.getDirections(
@@ -113,7 +111,6 @@ class MapControllerNotifier extends StateNotifier<MapState> {
         isLoading: false,
       );
 
-      // Fit the route in the map view
       if (state.routeCoordinates.isNotEmpty) {
         final bounds = LatLngBounds.fromPoints(state.routeCoordinates);
         state.mapController.fitCamera(
@@ -123,7 +120,6 @@ class MapControllerNotifier extends StateNotifier<MapState> {
     } catch (e) {
       state = state.copyWith(isLoading: false);
       print("Error getting directions: $e");
-      // You might want to show this error to the user
       throw Exception("Failed to get directions: $e");
     }
   }

@@ -7,12 +7,15 @@ class MapService {
     if (query.isEmpty) return [];
 
     final url = Uri.parse(
-        "https://nominatim.openstreetmap.org/search?format=json&q=$query&limit=5");
+      "https://nominatim.openstreetmap.org/search?format=json&q=$query&limit=5",
+    );
     final response = await http.get(url);
 
     if (response.statusCode == 200) {
       final List results = json.decode(response.body);
-      return results.map((result) => result['display_name'].toString()).toList();
+      return results
+          .map((result) => result['display_name'].toString())
+          .toList();
     } else {
       throw Exception('Failed to load autocomplete suggestions');
     }
@@ -20,7 +23,8 @@ class MapService {
 
   static Future<LatLng?> searchLocation(String query) async {
     final url = Uri.parse(
-        "https://nominatim.openstreetmap.org/search?format=json&q=$query&limit=1");
+      "https://nominatim.openstreetmap.org/search?format=json&q=$query&limit=1",
+    );
     final response = await http.get(url);
 
     if (response.statusCode == 200) {
@@ -35,99 +39,39 @@ class MapService {
     return null;
   }
 
-   static Future<Map<String, dynamic>> getDirections(LatLng start, LatLng end) async {
-    // Try Alesa API first
-    try {
-      final alesaResponse = await _tryAlesaApi(start, end);
-      return alesaResponse;
-    } catch (e) {
-      print("Alesa API failed, falling back to OSRM: $e");
-      return _tryOsrmApi(start, end);
-    }
-  }
-
-  static Future<Map<String, dynamic>> _tryAlesaApi(LatLng start, LatLng end) async {
-    final url = Uri.parse("https://routes.alesaservices.com/route");
-    final body = json.encode({
-      "locations": [
-        {"lat": start.latitude, "lon": start.longitude},
-        {"lat": end.latitude, "lon": end.longitude}
-      ],
-      "costing": "auto",
-      "directions_options": {
-        "units": "metric",
-        "language": "en"
-      }
-    });
-
-    final response = await http.post(
-      url,
-      body: body,
-      headers: {"Content-Type": "application/json"},
-    );
-
-    if (response.statusCode == 200) {
-      return _parseDirectionsResponse(response.body);
-    } else {
-      throw Exception('Alesa API failed with status ${response.statusCode}');
-    }
-  }
-
-  static Future<Map<String, dynamic>> _tryOsrmApi(LatLng start, LatLng end) async {
+  static Future<Map<String, dynamic>> getDirections(
+    LatLng start,
+    LatLng end,
+  ) async {
     final url = Uri.parse(
       "https://router.project-osrm.org/route/v1/driving/"
       "${start.longitude},${start.latitude};${end.longitude},${end.latitude}"
-      "?overview=full&geometries=geojson&steps=true"
+      "?overview=full&geometries=geojson&steps=true",
     );
 
     final response = await http.get(url);
 
     if (response.statusCode == 200) {
-      return _parseOsrmResponse(response.body);
-    } else {
-      throw Exception('OSRM API failed with status ${response.statusCode}');
-    }
-  }
+      final data = json.decode(response.body);
+      final coordinates = data['routes'][0]['geometry']['coordinates'];
+      final routeCoords =
+          coordinates.map((coord) => LatLng(coord[1], coord[0])).toList();
 
-  static Map<String, dynamic> _parseDirectionsResponse(String responseBody) {
-    final data = json.decode(responseBody);
-    final coordinates = data['route']['geometry']['coordinates'];
-    final routeCoords = coordinates.map((coord) => LatLng(coord[1], coord[0])).toList();
-    
-    final maneuvers = data['route']['legs'][0]['maneuvers'];
-    final directions = maneuvers.map((maneuver) {
-      return {
-        'instruction': maneuver['instruction'].toString(),
-        'distance': (maneuver['length'] * 1000).round(),
-      };
-    }).toList();
+      final legs = data['routes'][0]['legs'];
+      final directions = <Map<String, dynamic>>[];
 
-    return {
-      'routeCoordinates': routeCoords,
-      'directions': directions,
-    };
-  }
-
-  static Map<String, dynamic> _parseOsrmResponse(String responseBody) {
-    final data = json.decode(responseBody);
-    final coordinates = data['routes'][0]['geometry']['coordinates'];
-    final routeCoords = coordinates.map((coord) => LatLng(coord[1], coord[0])).toList();
-    
-    final legs = data['routes'][0]['legs'];
-    final directions = <Map<String, dynamic>>[];
-    
-    for (final leg in legs) {
-      for (final step in leg['steps']) {
-        directions.add({
-          'instruction': step['maneuver']['instruction'],
-          'distance': (step['distance']).round(),
-        });
+      for (final leg in legs) {
+        for (final step in leg['steps']) {
+          directions.add({
+            'instruction': step['maneuver']['instruction'],
+            'distance': (step['distance']).round(),
+          });
+        }
       }
-    }
 
-    return {
-      'routeCoordinates': routeCoords,
-      'directions': directions,
-    };
+      return {'routeCoordinates': routeCoords, 'directions': directions};
+    } else {
+      throw Exception('Failed to load directions: ${response.statusCode}');
+    }
   }
 }

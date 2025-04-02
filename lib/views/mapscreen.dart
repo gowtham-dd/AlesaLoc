@@ -29,31 +29,55 @@ class MapPage extends ConsumerWidget {
             onPressed: () async {
               if (_startController.text.isNotEmpty &&
                   _endController.text.isNotEmpty) {
-                try {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Calculating route...")),
-                  );
+                ScaffoldMessenger.of(
+                  context,
+                ).showSnackBar(SnackBar(content: Text("Calculating route...")));
 
-                  await mapNotifier.searchAndSetLocation(
-                    _startController.text,
-                    true,
-                  );
-                  await mapNotifier.searchAndSetLocation(
-                    _endController.text,
-                    false,
-                  );
-                  await mapNotifier.getDirections();
-                } catch (e) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text("Error: ${e.toString()}")),
-                  );
-                }
+                await mapNotifier.searchAndSetLocation(
+                  _startController.text,
+                  true,
+                );
+                await mapNotifier.searchAndSetLocation(
+                  _endController.text,
+                  false,
+                );
+                await mapNotifier.getDirections();
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text("Please enter both locations")),
                 );
               }
             },
+          ),
+        ],
+      ),
+      floatingActionButton: Column(
+        mainAxisAlignment: MainAxisAlignment.end,
+        children: [
+          FloatingActionButton(
+            mini: true,
+            heroTag: 'zoomIn',
+            onPressed: () {
+              final currentZoom = mapState.mapController.camera.zoom;
+              mapState.mapController.move(
+                mapState.mapController.camera.center,
+                currentZoom + 1,
+              );
+            },
+            child: Icon(Icons.add),
+          ),
+          SizedBox(height: 10),
+          FloatingActionButton(
+            mini: true,
+            heroTag: 'zoomOut',
+            onPressed: () {
+              final currentZoom = mapState.mapController.camera.zoom;
+              mapState.mapController.move(
+                mapState.mapController.camera.center,
+                currentZoom - 1,
+              );
+            },
+            child: Icon(Icons.remove),
           ),
         ],
       ),
@@ -216,6 +240,7 @@ class MapPage extends ConsumerWidget {
                 ),
               ),
             ),
+          if (mapState.isLoading) Center(child: CircularProgressIndicator()),
         ],
       ),
     );
