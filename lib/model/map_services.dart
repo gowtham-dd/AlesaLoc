@@ -62,9 +62,20 @@ class MapService {
 
       for (final leg in legs) {
         for (final step in leg['steps']) {
+          final maneuver = step['maneuver'];
+          final distance = (step['distance'] ?? 0).round();
+
+          // Extract maneuver type and modifier
+          final type = maneuver['type']?.toString() ?? '';
+          final modifier = maneuver['modifier']?.toString() ?? '';
+
+          String instruction = _getManeuverInstruction(type, modifier);
+
           directions.add({
-            'instruction': step['maneuver']['instruction'],
-            'distance': (step['distance']).round(),
+            'instruction': instruction,
+            'distance': distance,
+            'type': type,
+            'modifier': modifier,
           });
         }
       }
@@ -73,5 +84,59 @@ class MapService {
     } else {
       throw Exception('Failed to load directions: ${response.statusCode}');
     }
+  }
+
+  static String _getManeuverInstruction(String type, String modifier) {
+    switch (type) {
+      case 'turn':
+        switch (modifier) {
+          case 'left':
+            return 'Turn left';
+          case 'right':
+            return 'Turn right';
+          case 'sharp left':
+            return 'Sharp left turn';
+          case 'sharp right':
+            return 'Sharp right turn';
+          case 'slight left':
+            return 'Slight left turn';
+          case 'slight right':
+            return 'Slight right turn';
+          default:
+            return 'Turn';
+        }
+      case 'new name':
+        return 'Continue straight';
+      case 'depart':
+        return 'Start going';
+      case 'arrive':
+        return 'Arrive at destination';
+      case 'merge':
+        return 'Merge onto road';
+      case 'ramp':
+        return 'Take the ramp';
+      case 'on ramp':
+        return 'Take the on ramp';
+      case 'off ramp':
+        return 'Take the exit ramp';
+      case 'fork':
+        return 'At fork';
+      case 'end of road':
+        return 'Road ends';
+      case 'roundabout':
+        return 'Take the roundabout';
+      default:
+        return 'Continue';
+    }
+  }
+
+  static String _cleanInstruction(String instruction) {
+    // Remove HTML tags if any
+    instruction = instruction.replaceAll(RegExp(r'<[^>]*>'), '');
+    // Capitalize first letter
+    if (instruction.isNotEmpty) {
+      instruction = instruction[0].toUpperCase() + instruction.substring(1);
+    }
+    return instruction;
   }
 }

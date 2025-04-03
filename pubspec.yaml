@@ -41,6 +41,7 @@ dependencies:
   geolocator: ^13.0.4
   flutter_animate: ^4.5.2
   flutter_typeahead: ^5.2.0
+  flutter_tts: ^4.2.2
 
 
 

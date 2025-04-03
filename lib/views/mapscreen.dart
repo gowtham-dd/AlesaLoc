@@ -2,17 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_animate/flutter_animate.dart';
 import 'package:locationproject/controller/map_controllar.dart';
 
-class MapPage extends ConsumerWidget {
+class MapPage extends ConsumerStatefulWidget {
+  @override
+  ConsumerState<MapPage> createState() => _MapPageState();
+}
+
+class _MapPageState extends ConsumerState<MapPage> {
   final TextEditingController _startController = TextEditingController();
   final TextEditingController _endController = TextEditingController();
   final FocusNode _startFocusNode = FocusNode();
   final FocusNode _endFocusNode = FocusNode();
+  bool _showRouteDistance = false;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(mapProvider.notifier).getUserLocation();
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final mapState = ref.watch(mapProvider);
     final mapNotifier = ref.read(mapProvider.notifier);
 
@@ -33,15 +46,24 @@ class MapPage extends ConsumerWidget {
                   context,
                 ).showSnackBar(SnackBar(content: Text("Calculating route...")));
 
-                await mapNotifier.searchAndSetLocation(
-                  _startController.text,
-                  true,
-                );
-                await mapNotifier.searchAndSetLocation(
-                  _endController.text,
-                  false,
-                );
-                await mapNotifier.getDirections();
+                try {
+                  await mapNotifier.searchAndSetLocation(
+                    _startController.text,
+                    true,
+                  );
+                  await mapNotifier.searchAndSetLocation(
+                    _endController.text,
+                    false,
+                  );
+                  await mapNotifier.getDirections();
+                  setState(() {
+                    _showRouteDistance = true;
+                  });
+                } catch (e) {
+                  ScaffoldMessenger.of(
+                    context,
+                  ).showSnackBar(SnackBar(content: Text(e.toString())));
+                }
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(content: Text("Please enter both locations")),
@@ -54,6 +76,13 @@ class MapPage extends ConsumerWidget {
       floatingActionButton: Column(
         mainAxisAlignment: MainAxisAlignment.end,
         children: [
+          if (mapState.directions.isNotEmpty)
+            FloatingActionButton(
+              heroTag: 'stop_navigation',
+              onPressed: () => mapNotifier.stopNavigation(),
+              child: Icon(Icons.volume_off),
+            ),
+          SizedBox(height: 10),
           FloatingActionButton(
             mini: true,
             heroTag: 'zoomIn',
@@ -66,6 +95,7 @@ class MapPage extends ConsumerWidget {
             },
             child: Icon(Icons.add),
           ),
+
           SizedBox(height: 10),
           FloatingActionButton(
             mini: true,
@@ -213,12 +243,26 @@ class MapPage extends ConsumerWidget {
                   children: [
                     Padding(
                       padding: EdgeInsets.all(12),
-                      child: Text(
-                        "Turn-by-Turn Directions",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            "Step-by-Step Directions",
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            _formatDistance(
+                              _calculateTotalDistance(mapState.directions),
+                            ),
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey[600],
+                            ),
+                          ),
+                        ],
                       ),
                     ),
                     Divider(height: 1),
@@ -229,9 +273,21 @@ class MapPage extends ConsumerWidget {
                         itemBuilder: (context, index) {
                           final direction = mapState.directions[index];
                           return ListTile(
-                            leading: Icon(Icons.directions),
-                            title: Text(direction['instruction']),
-                            subtitle: Text("${direction['distance']} meters"),
+                            leading: _getDirectionIcon(
+                              direction['type'],
+                              direction['modifier'],
+                            ),
+                            title: Text(
+                              direction['instruction'],
+                              style: TextStyle(fontSize: 16),
+                            ),
+                            trailing: Text(
+                              _formatDistance(direction['distance']),
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey[600],
+                              ),
+                            ),
                           );
                         },
                       ),
@@ -244,6 +300,11 @@ class MapPage extends ConsumerWidget {
         ],
       ),
     );
+  }
+
+  String _formatDistance(int meters) {
+    if (meters < 1000) return '${meters}m';
+    return '${(meters / 1000).toStringAsFixed(1)}km';
   }
 
   Widget _buildSearchField(
@@ -281,6 +342,9 @@ class MapPage extends ConsumerWidget {
                         directions: [],
                       );
                     }
+                    setState(() {
+                      _showRouteDistance = false;
+                    });
                   },
                 )
                 : null,
@@ -293,5 +357,29 @@ class MapPage extends ConsumerWidget {
         }
       },
     );
+  }
+
+  int _calculateTotalDistance(List<Map<String, dynamic>> directions) {
+    return directions.fold(0, (sum, dir) => sum + (dir['distance'] as int));
+  }
+
+  Icon _getDirectionIcon(String type, String? modifier) {
+    switch (type) {
+      case 'turn':
+        switch (modifier) {
+          case 'left':
+            return Icon(Icons.turn_left, color: Colors.blue);
+          case 'right':
+            return Icon(Icons.turn_right, color: Colors.green);
+          default:
+            return Icon(Icons.directions, color: Colors.grey);
+        }
+      case 'depart':
+        return Icon(Icons.flag, color: Colors.green);
+      case 'arrive':
+        return Icon(Icons.flag, color: Colors.red);
+      default:
+        return Icon(Icons.directions, color: Colors.grey);
+    }
   }
 }
