@@ -10,9 +10,7 @@ class MapPage extends ConsumerStatefulWidget {
 }
 
 class _MapPageState extends ConsumerState<MapPage> {
-  final TextEditingController _startController = TextEditingController();
   final TextEditingController _endController = TextEditingController();
-  final FocusNode _startFocusNode = FocusNode();
   final FocusNode _endFocusNode = FocusNode();
   bool _showRouteDistance = false;
 
@@ -35,22 +33,18 @@ class _MapPageState extends ConsumerState<MapPage> {
         actions: [
           IconButton(
             icon: Icon(Icons.my_location),
-            onPressed: () => mapNotifier.getUserLocation(),
+            onPressed: () {
+              mapNotifier.getUserLocation();
+            },
           ),
           IconButton(
             icon: Icon(Icons.directions),
             onPressed: () async {
-              if (_startController.text.isNotEmpty &&
-                  _endController.text.isNotEmpty) {
-                ScaffoldMessenger.of(
-                  context,
-                ).showSnackBar(SnackBar(content: Text("Calculating route...")));
+              if (_endController.text.isNotEmpty) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text("Calculating route...")));
 
                 try {
-                  await mapNotifier.searchAndSetLocation(
-                    _startController.text,
-                    true,
-                  );
                   await mapNotifier.searchAndSetLocation(
                     _endController.text,
                     false,
@@ -60,13 +54,12 @@ class _MapPageState extends ConsumerState<MapPage> {
                     _showRouteDistance = true;
                   });
                 } catch (e) {
-                  ScaffoldMessenger.of(
-                    context,
-                  ).showSnackBar(SnackBar(content: Text(e.toString())));
+                  ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(e.toString())));
                 }
               } else {
                 ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text("Please enter both locations")),
+                  SnackBar(content: Text("Please enter destination")),
                 );
               }
             },
@@ -95,7 +88,6 @@ class _MapPageState extends ConsumerState<MapPage> {
             },
             child: Icon(Icons.add),
           ),
-
           SizedBox(height: 10),
           FloatingActionButton(
             mini: true,
@@ -120,7 +112,6 @@ class _MapPageState extends ConsumerState<MapPage> {
                   mapState.currentLocation ?? LatLng(11.0168, 76.9558),
               initialZoom: 13.0,
               onTap: (_, __) {
-                _startFocusNode.unfocus();
                 _endFocusNode.unfocus();
               },
             ),
@@ -202,17 +193,32 @@ class _MapPageState extends ConsumerState<MapPage> {
               ),
               child: Column(
                 children: [
-                  _buildSearchField(
-                    context,
-                    "Start Location",
-                    _startController,
-                    _startFocusNode,
-                    ref,
+                  Container(
+                    padding: EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+                    decoration: BoxDecoration(
+                      color: Colors.grey[100],
+                      borderRadius: BorderRadius.circular(4),
+                      border: Border.all(color: Colors.grey[300]!),
+                    ),
+                    child: Row(
+                      children: [
+                        Icon(Icons.my_location, color: Colors.blue),
+                        SizedBox(width: 10),
+                        Expanded(
+                          child: Text(
+                            "Current Location",
+                            style: TextStyle(fontSize: 16),
+                          ),
+                        ),
+                        if (mapState.currentLocation != null)
+                          Icon(Icons.check_circle, color: Colors.green),
+                      ],
+                    ),
                   ),
                   SizedBox(height: 12),
                   _buildSearchField(
                     context,
-                    "End Location",
+                    "Destination",
                     _endController,
                     _endFocusNode,
                     ref,
@@ -255,8 +261,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                           ),
                           Text(
                             _formatDistance(
-                              _calculateTotalDistance(mapState.directions),
-                            ),
+                                _calculateTotalDistance(mapState.directions)),
                             style: TextStyle(
                               fontSize: 14,
                               color: Colors.grey[600],
@@ -274,9 +279,7 @@ class _MapPageState extends ConsumerState<MapPage> {
                           final direction = mapState.directions[index];
                           return ListTile(
                             leading: _getDirectionIcon(
-                              direction['type'],
-                              direction['modifier'],
-                            ),
+                                direction['type'], direction['modifier']),
                             title: Text(
                               direction['instruction'],
                               style: TextStyle(fontSize: 16),
@@ -322,38 +325,29 @@ class _MapPageState extends ConsumerState<MapPage> {
         border: OutlineInputBorder(),
         filled: true,
         fillColor: Colors.grey[100],
-        suffixIcon:
-            controller.text.isNotEmpty
-                ? IconButton(
-                  icon: Icon(Icons.clear),
-                  onPressed: () {
-                    controller.clear();
-                    final notifier = ref.read(mapProvider.notifier);
-                    if (label == "Start Location") {
-                      notifier.state = notifier.state.copyWith(
-                        startLocation: null,
-                        routeCoordinates: [],
-                        directions: [],
-                      );
-                    } else {
-                      notifier.state = notifier.state.copyWith(
-                        endLocation: null,
-                        routeCoordinates: [],
-                        directions: [],
-                      );
-                    }
-                    setState(() {
-                      _showRouteDistance = false;
-                    });
-                  },
-                )
-                : null,
+        suffixIcon: controller.text.isNotEmpty
+            ? IconButton(
+                icon: Icon(Icons.clear),
+                onPressed: () {
+                  controller.clear();
+                  final notifier = ref.read(mapProvider.notifier);
+                  notifier.state = notifier.state.copyWith(
+                    endLocation: null,
+                    routeCoordinates: [],
+                    directions: [],
+                  );
+                  setState(() {
+                    _showRouteDistance = false;
+                  });
+                },
+              )
+            : null,
       ),
       onSubmitted: (value) async {
         if (value.isNotEmpty) {
           await ref
               .read(mapProvider.notifier)
-              .searchAndSetLocation(value, label == "Start Location");
+              .searchAndSetLocation(value, false);
         }
       },
     );

@@ -51,9 +51,10 @@ class MapState {
     bool? isLoading,
     bool? isSpeaking,
     int? currentStep,
+    MapController? mapController,
   }) {
     return MapState(
-      mapController: mapController,
+      mapController: mapController ?? this.mapController,
       currentLocation: currentLocation ?? this.currentLocation,
       startLocation: startLocation ?? this.startLocation,
       endLocation: endLocation ?? this.endLocation,
@@ -76,9 +77,16 @@ class MapControllerNotifier extends StateNotifier<MapState> {
   MapControllerNotifier(this._tts)
     : super(MapState(mapController: MapController())) {
     _initTTS();
-    getUserLocation();
+    _initializeLocation();
     startBlinking();
   }
+
+  Future<void> _initializeLocation() async {
+    await getUserLocation();
+    // Start position updates after initial location is obtained
+    _startPositionUpdates();
+  }
+
   Future<void> _initTTS() async {
     try {
       await _tts.setLanguage('en-US');
@@ -88,7 +96,6 @@ class MapControllerNotifier extends StateNotifier<MapState> {
       print("TTS initialized successfully");
     } catch (e) {
       print("Error initializing TTS: $e");
-      // You might want to disable TTS functionality if initialization fails
     }
   }
 
@@ -119,7 +126,7 @@ class MapControllerNotifier extends StateNotifier<MapState> {
       }
     } catch (e) {
       print("Error getting IP location: $e");
-      // Fallback to default location (Coimbatore)
+      // Fallback to default location
       _updateLocation(
         Position(
           latitude: 11.0168,
@@ -180,19 +187,17 @@ class MapControllerNotifier extends StateNotifier<MapState> {
   }
 
   void _updateLocation(Position position) {
+    final newLocation = LatLng(position.latitude, position.longitude);
     state = state.copyWith(
-      currentLocation: LatLng(position.latitude, position.longitude),
+      currentLocation: newLocation,
+      startLocation: newLocation, // Always update start location to current
     );
-    state.mapController.move(
-      LatLng(position.latitude, position.longitude),
-      15.0,
-    );
+    state.mapController.move(newLocation, state.mapController.camera.zoom);
   }
 
   Future<void> _checkMovement(Position currentPosition) async {
     if (state.directions.isEmpty || !_navigationActive) return;
 
-    // Check if user has moved significantly (at least 20 meters)
     if (_lastPosition != null) {
       final distance = Geolocator.distanceBetween(
         _lastPosition!.latitude,
@@ -202,10 +207,8 @@ class MapControllerNotifier extends StateNotifier<MapState> {
       );
 
       if (distance < 20) {
-        // If not moved enough, repeat current instruction after delay
         Future.delayed(Duration(seconds: 30), () {
-          if (_navigationActive &&
-              state.currentStep < state.directions.length) {
+          if (_navigationActive && state.currentStep < state.directions.length) {
             _speakInstruction(state.directions[state.currentStep]);
           }
         });
@@ -233,10 +236,9 @@ class MapControllerNotifier extends StateNotifier<MapState> {
 
     final instruction = direction['instruction'];
     final distance = direction['distance'];
-    final distanceText =
-        distance < 1000
-            ? '$distance meters'
-            : '${(distance / 1000).toStringAsFixed(1)} kilometers';
+    final distanceText = distance < 1000
+        ? '$distance meters'
+        : '${(distance / 1000).toStringAsFixed(1)} kilometers';
 
     state = state.copyWith(isSpeaking: true);
     await _tts.speak('$instruction in $distanceText');
@@ -260,30 +262,32 @@ class MapControllerNotifier extends StateNotifier<MapState> {
     if (query.isEmpty) return;
 
     try {
+      state = state.copyWith(isLoading: true);
       final location = await MapService.searchLocation(query);
       if (location != null) {
-        state =
-            isStart
-                ? state.copyWith(startLocation: location)
-                : state.copyWith(endLocation: location);
-
+        state = state.copyWith(
+          endLocation: location, // Only set end location
+          isLoading: false,
+        );
         state.mapController.move(location, 15.0);
       }
     } catch (e) {
+      state = state.copyWith(isLoading: false);
       print("Error searching location: $e");
+      throw Exception("Could not find location: ${e.toString()}");
     }
   }
 
   Future<void> getDirections() async {
-    if (state.startLocation == null || state.endLocation == null) {
-      throw Exception("Start or end location not set");
+    if (state.currentLocation == null || state.endLocation == null) {
+      throw Exception("Current location or destination not set");
     }
 
     try {
       state = state.copyWith(isLoading: true, directions: []);
 
       final result = await MapService.getDirections(
-        state.startLocation!,
+        state.currentLocation!, // Always use current location as start
         state.endLocation!,
       );
 
@@ -300,7 +304,7 @@ class MapControllerNotifier extends StateNotifier<MapState> {
 
       // Start navigation
       _navigationActive = true;
-      _startPositionUpdates();
+      _lastPosition = null; // Reset last position
       await _speakInstruction(state.directions[0]);
 
       if (state.routeCoordinates.isNotEmpty) {
@@ -316,7 +320,6 @@ class MapControllerNotifier extends StateNotifier<MapState> {
     }
   }
 
-  // Add the new public stopNavigation method here
   Future<void> stopNavigation() async {
     try {
       await _tts.stop();
@@ -331,7 +334,6 @@ class MapControllerNotifier extends StateNotifier<MapState> {
       );
     } catch (e) {
       print("Error stopping navigation: $e");
-      // Fallback to just clearing the state if TTS fails
       state = state.copyWith(
         directions: [],
         routeCoordinates: [],
@@ -343,7 +345,7 @@ class MapControllerNotifier extends StateNotifier<MapState> {
 
   void startBlinking() {
     Future.delayed(Duration(milliseconds: 500), () {
-      if (!_navigationActive) return; // Only blink when navigating
+      if (!_navigationActive) return;
       state = state.copyWith(isBlinking: !state.isBlinking);
       startBlinking();
     });
